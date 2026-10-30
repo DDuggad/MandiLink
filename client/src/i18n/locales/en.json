@@ -1,0 +1,53 @@
+{
+  "app": {
+    "name": "MandiLink",
+    "tagline": "Direct market price & transporter finder"
+  },
+  "nav": {
+    "home": "Home",
+    "prices": "Prices",
+    "transporters": "Transporters",
+    "settings": "Settings"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline (cached)",
+    "lastUpdated": "Last updated",
+    "syncing": "Syncing..."
+  },
+  "home": {
+    "nearbyMandis": "Nearby Mandis",
+    "topCommodities": "Commodity Prices",
+    "viewDetails": "View Details",
+    "distance": "{{km}} km away",
+    "unit": "₹ / quintal",
+    "modalPrice": "Modal Price",
+    "minMax": "Min: ₹{{min}} | Max: ₹{{max}}",
+    "noMandis": "No mandis found within radius. Try increasing search distance in Settings."
+  },
+  "prices": {
+    "title": "Price Trends & Forecast",
+    "trendDays": "Last {{days}} Days",
+    "forecast": "Estimated Future Price",
+    "disclaimer": "Estimate based on past prices only. Actual market rates may vary.",
+    "selectCommodity": "Select Commodity"
+  },
+  "transporters": {
+    "title": "Nearby Transporters",
+    "call": "Call Now",
+    "rate": "₹{{rate}} / km",
+    "capacity": "Capacity: {{cap}} kg",
+    "verified": "Verified Partner",
+    "languages": "Speaks: {{langs}}"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "App Language",
+    "location": "Your Location",
+    "useGps": "Detect current GPS location",
+    "manualLocation": "Or select state & district manually",
+    "searchRadius": "Search radius: {{km}} km",
+    "dataSaver": "Low data mode (sync on Wi-Fi only)",
+    "clearCache": "Clear cached data"
+  }
+}

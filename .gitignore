@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.vite/
+
+# Environment - never commit real secrets
+.env
+.env.local
+.env.*.local
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Editor artifacts
+.vscode/settings.json
+.idea/
+
+# Seed output / debug
+server/seed/output/

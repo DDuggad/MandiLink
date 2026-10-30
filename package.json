@@ -1,0 +1,26 @@
+{
+  "name": "mandilink",
+  "version": "1.0.0",
+  "description": "Offline-capable multilingual mandi price PWA for farmers + admin portal",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client",
+    "admin"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT,ADMIN\" -c \"blueBright,greenBright,magentaBright\" \"npm run dev --workspace=server\" \"npm run dev --workspace=client\" \"npm run dev --workspace=admin\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "dev:admin": "npm run dev --workspace=admin",
+    "seed": "npm run seed --workspace=server",
+    "format": "prettier --write \"**/*.{js,jsx,json,md,css}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{js,jsx,json,md,css}\" --ignore-path .gitignore",
+    "lint": "npm run format:check",
+    "build": "npm run build --workspace=client && npm run build --workspace=admin"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.9.10"
+  }
+}
