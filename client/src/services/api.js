@@ -1,6 +1,6 @@
 import { getCachedItems, cacheItems, getLastSynced, setLastSynced } from './db.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 // Perform delta sync: fetch changed records since lastSyncedAt, update IndexedDB
 export async function performDeltaSync() {
