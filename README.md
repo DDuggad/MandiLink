@@ -11,11 +11,12 @@
 **MandiLink** is an offline-first, low-data, multilingual mobile Progressive Web Application (PWA) paired with an APMC operations admin web portal. It bridges critical information asymmetry for small and marginal farmers across tier-3 and tier-4 rural regions by providing:
 
 1. **Nearby APMC Mandi Rates:** Geolocation-aware discovery of wholesale markets with real-time modal, minimum, and maximum prices.
-2. **Explainable Price Trends & Honest Forecasts:** 7/30/90-day historical trends and statistical moving average forecasts rigorously backtested and compared against a naive baseline (no black-box hype).
-3. **Local Agricultural Transporters:** Directory of verified rural transporters with transparent per-km rates, vehicle capacity, and one-tap direct phone dialing.
+2. **Explainable Price Trends & Honest Forecasts:** 7/30/90/180-day historical trends and statistical forecasting (Naive baseline, 7-Day & 30-Day Moving Averages, OLS Linear Trend Regression, and Weekly Day-of-Week Seasonality) rigorously backtested on a 14-day holdout validation with explicit MAPE metrics and explainability cards (no black-box hype).
+3. **Local Agricultural Transporters:** Directory of verified rural transporters with transparent per-km rates, vehicle capacity, WhatsApp chat, and one-tap direct phone dialing.
 4. **Offline-First & Low-Data Sync:** Service Worker app shell caching + local IndexedDB database, combined with a **delta sync protocol** (`GET /api/sync?since=<timestamp>`) that downloads only modified records to conserve bandwidth on 2G/3G connections.
 5. **Multilingual from Day One:** Full native language interface supporting **English**, **Kannada (ಕನ್ನಡ)**, **Hindi (हिन्दी)**, and **Marathi (मराठी)**.
-6. **APMC Operations Admin Portal:** Desktop management portal for single and bulk CSV price entry, mandi and commodity management, and automated Government of India (data.gov.in AGMARKNET) price ingestion.
+6. **Google Play / TWA Store Ready:** Full PWA manifest compliance (`id`, `categories`, `display_override`), standard (192x192, 512x512) and maskable icons, dual form-factor screenshots (mobile portrait & desktop landscape), and quick action shortcuts.
+7. **APMC Operations Admin Portal:** Desktop management portal for single and bulk CSV price entry, mandi and commodity management, and automated Government of India (data.gov.in AGMARKNET) price ingestion with alias matching.
 
 ---
 
@@ -143,7 +144,9 @@ Bundle verification results:
 - `GET /api/commodities` — Monitored commodities with multilingual names
 - `GET /api/prices?commodityId=&mandiIds=&from=&to=` — Price history series
 - `GET /api/prices/latest?commodityIds=&mandiIds=` — Latest modal, min, max price per market
-- `GET /api/prices/forecast?commodityId=&mandiId=&horizonDays=7` — Statistical moving-average forecast with naive baseline comparison
+- `GET /api/prices/forecast?commodityId=&mandiId=&horizonDays=7` — 5-model statistical forecast (Naive, MA7, MA30, Linear Trend, Seasonal) with holdout backtest MAPE and baseline comparison
+- `GET /api/prices/live-status` — Real-time AGMARKNET ingestion health and timestamp monitor
+- `POST /api/prices/sync-live` — Trigger real-time AGMARKNET feed update
 - `GET /api/transporters/nearby?lat=&lng=&radiusKm=` — Nearby verified rural drivers with rates
 - `GET /api/sync?since=<ISOString>` — **Delta sync endpoint** returning only records changed since last sync timestamp
 - `GET /api/health` — Service health and uptime monitor

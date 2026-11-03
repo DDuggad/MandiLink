@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Phone, X, Store, CheckCircle, Navigation } from 'lucide-react';
+import { MapPin, Phone, X, Store, Navigation } from 'lucide-react';
 
 export default function MandiDetailModal({ mandi, prices, isOpen, onClose }) {
   const { t, i18n } = useTranslation();
@@ -23,54 +23,55 @@ export default function MandiDetailModal({ mandi, prices, isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 max-h-[85vh] overflow-y-auto space-y-4">
-        <div className="flex justify-between items-start">
-          <div className="flex items-center space-x-2">
-            <div className="w-10 h-10 rounded-xl bg-agri-100 text-agri-800 flex items-center justify-center">
-              <Store className="w-5 h-5" />
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-gray-100 max-h-[88vh] overflow-y-auto space-y-4 animate-scale-in">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+            <div className="w-10 h-10 rounded-2xl bg-agri-100 text-agri-800 flex items-center justify-center flex-shrink-0 shadow-inner">
+              <Store className="w-5 h-5 text-agri-700" />
             </div>
-            <div>
-              <h3 className="font-bold text-base text-gray-900">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-extrabold text-base text-gray-900 leading-tight">
                 {getLocalizedName(mandi.names, mandi.code)}
               </h3>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 mt-0.5 truncate">
                 {mandi.district}, {mandi.state}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100"
+            className="text-gray-400 hover:text-gray-700 p-1.5 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Address and details */}
-        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+        {/* Address and details card */}
+        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs">
           {mandi.address && (
             <div className="flex items-start space-x-2 text-gray-600">
               <MapPin className="w-4 h-4 text-agri-600 flex-shrink-0 mt-0.5" />
-              <span>{mandi.address}</span>
+              <span className="leading-relaxed">{mandi.address}</span>
             </div>
           )}
 
           {mandi.distanceKm != null && (
-            <div className="flex items-center space-x-2 text-agri-800 font-semibold">
-              <Navigation className="w-4 h-4 text-agri-600" />
+            <div className="flex items-center space-x-2 text-agri-800 font-bold">
+              <Navigation className="w-4 h-4 text-agri-600 flex-shrink-0" />
               <span>Distance: ~{mandi.distanceKm} km from your location</span>
             </div>
           )}
 
           {mandi.phone && (
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-200">
               <div className="flex items-center space-x-1.5 text-gray-600">
-                <Phone className="w-4 h-4 text-agri-600" />
+                <Phone className="w-4 h-4 text-agri-600 flex-shrink-0" />
                 <span>Office: {mandi.phone}</span>
               </div>
               <a
                 href={`tel:${mandi.phone}`}
-                className="bg-agri-700 hover:bg-agri-800 text-white px-3 py-1 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1"
+                className="bg-agri-700 hover:bg-agri-800 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1"
               >
                 <span>Call Mandi</span>
               </a>
@@ -81,14 +82,14 @@ export default function MandiDetailModal({ mandi, prices, isOpen, onClose }) {
         {/* Today's Arrivals & Prices */}
         <div className="space-y-2 pt-1">
           <div className="flex justify-between items-center">
-            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+            <h4 className="text-xs font-extrabold text-gray-800 uppercase tracking-wider">
               Today's Market Rates at this APMC
             </h4>
-            <span className="text-[10px] text-gray-400">₹ per quintal</span>
+            <span className="text-[10px] text-gray-500 font-medium">₹ per quintal</span>
           </div>
 
           {mandiPrices.length === 0 ? (
-            <div className="text-center py-6 text-xs text-gray-400 bg-gray-50 rounded-xl">
+            <div className="text-center py-6 text-xs text-gray-500 bg-slate-50 rounded-2xl border border-slate-100">
               No prices recorded today for this mandi yet.
             </div>
           ) : (
@@ -96,26 +97,26 @@ export default function MandiDetailModal({ mandi, prices, isOpen, onClose }) {
               {mandiPrices.map((p, idx) => (
                 <div
                   key={idx}
-                  className="bg-white border border-gray-200 p-3 rounded-xl flex items-center justify-between"
+                  className="bg-white border border-gray-200 p-3 rounded-2xl flex items-center justify-between gap-3 shadow-xs hover:border-agri-300 transition-all"
                 >
-                  <div>
-                    <div className="font-bold text-xs text-gray-800">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-xs text-gray-900 truncate">
                       {getLocalizedName(
                         p.commodity?.names,
                         p.commodityCode || 'Commodity'
                       )}
                     </div>
-                    <div className="text-[10px] text-gray-500">
+                    <div className="text-[10px] text-gray-500 mt-0.5 truncate">
                       {p.variety || 'Standard'}{' '}
                       {p.arrivals ? `• ${p.arrivals} tonnes` : ''}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-extrabold text-agri-700">
-                      ₹{p.modalPrice}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-black text-agri-700">
+                      ₹{p.modalPrice?.toLocaleString('en-IN')}
                     </div>
-                    <div className="text-[10px] text-gray-400">
-                      Range: ₹{p.minPrice} - ₹{p.maxPrice}
+                    <div className="text-[10px] text-gray-500">
+                      ₹{p.minPrice} – ₹{p.maxPrice}
                     </div>
                   </div>
                 </div>
@@ -126,7 +127,7 @@ export default function MandiDetailModal({ mandi, prices, isOpen, onClose }) {
 
         <button
           onClick={onClose}
-          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2.5 rounded-xl text-xs transition-colors"
+          className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2.5 rounded-xl text-xs transition-colors"
         >
           Close
         </button>

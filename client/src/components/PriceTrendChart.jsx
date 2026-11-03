@@ -1,14 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 
-export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
+export default function PriceTrendChart({
+  prices,
+  days = 30,
+  onDaysChange,
+  forecastPoints = null,
+}) {
   const [hoverIndex, setHoverIndex] = useState(null);
 
-  // Filter and sort points by date
+  // Filter and sort historical points by date
   const sortedPoints = useMemo(() => {
     if (!prices || prices.length === 0) return [];
 
-    // Filter by days
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     const cutoffStr = cutoff.toISOString().split('T')[0];
@@ -17,7 +21,7 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
       .filter((p) => p.date && p.date >= cutoffStr && p.modalPrice != null)
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Consolidate single price per date (if multiple mandis, compute average)
+    // Consolidate single price per date
     const byDate = new Map();
     valid.forEach((p) => {
       const dateKey = p.date.split('T')[0];
@@ -50,18 +54,19 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
 
   if (sortedPoints.length < 2) {
     return (
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center text-xs text-gray-400 py-8">
+      <div className="bg-white p-6 rounded-3xl border border-gray-200 text-center text-xs text-gray-500 py-8 shadow-xs">
         Not enough historical records to plot trend for this period.
       </div>
     );
   }
 
   // Chart layout dimensions (SVG coordinate space)
+  // padLeft: 54 provides full clearance for 5-6 digit values (e.g. ₹1,20,000)
   const width = 360;
-  const height = 150;
-  const padLeft = 42;
+  const height = 160;
+  const padLeft = 54;
   const padRight = 16;
-  const padTop = 16;
+  const padTop = 18;
   const padBottom = 26;
 
   const chartW = width - padLeft - padRight;
@@ -74,7 +79,7 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
   const maxVal = stats.max + (stats.max - stats.min) * 0.15 || stats.max * 1.1;
   const range = maxVal - minVal || 1;
 
-  // Convert points to SVG coordinates
+  // Convert historical points to SVG coordinates
   const coords = sortedPoints.map((pt, i) => {
     const x = padLeft + (i / (sortedPoints.length - 1)) * chartW;
     const y = padTop + chartH - ((pt.price - minVal) / range) * chartH;
@@ -92,26 +97,26 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
     hoverIndex !== null ? coords[hoverIndex] : coords[coords.length - 1];
 
   return (
-    <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm space-y-3">
-      {/* Header and timeframe toggle */}
-      <div className="flex items-center justify-between">
+    <div className="bg-white rounded-3xl p-4 sm:p-5 border border-gray-200/90 shadow-xs space-y-3.5">
+      {/* Header and timeframe toggle with responsive wrap */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <div className="text-xs text-gray-500 font-medium flex items-center space-x-1">
-            <Calendar className="w-3.5 h-3.5 text-agri-600" />
-            <span>Price Trend ({days} Days)</span>
+          <div className="text-xs text-gray-500 font-semibold flex items-center space-x-1.5">
+            <Calendar className="w-3.5 h-3.5 text-agri-600 flex-shrink-0" />
+            <span>Mandi Price Trend ({days} Days)</span>
           </div>
           <div className="flex items-center space-x-2 mt-0.5">
-            <span className="text-base font-bold text-gray-900">
-              ₹{activePoint.price}
+            <span className="text-lg font-black text-gray-900 leading-tight">
+              ₹{activePoint.price?.toLocaleString('en-IN')}
             </span>
-            <span className="text-[10px] text-gray-400">/ quintal</span>
+            <span className="text-[11px] text-gray-500 font-medium">/ quintal</span>
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center ${
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center ${
                 stats.change > 0
-                  ? 'bg-emerald-50 text-emerald-700'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                   : stats.change < 0
-                    ? 'bg-red-50 text-red-600'
-                    : 'bg-gray-100 text-gray-600'
+                    ? 'bg-red-50 text-red-700 border border-red-200'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200'
               }`}
             >
               {stats.change > 0 ? (
@@ -127,15 +132,15 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
         </div>
 
         {/* Timeframe Chips */}
-        <div className="flex bg-slate-100 p-0.5 rounded-xl text-xs font-semibold">
-          {[7, 30, 90].map((d) => (
+        <div className="flex bg-slate-100 p-1 rounded-2xl text-xs font-bold flex-shrink-0">
+          {[7, 30, 90, 180].map((d) => (
             <button
               key={d}
               onClick={() => onDaysChange && onDaysChange(d)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] transition-all ${
+              className={`px-2.5 py-1 rounded-xl text-[11px] transition-all cursor-pointer ${
                 days === d
-                  ? 'bg-white text-agri-800 shadow-sm font-bold'
-                  : 'text-gray-500 hover:text-gray-800'
+                  ? 'bg-white text-agri-800 shadow-xs font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {d}D
@@ -152,12 +157,12 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
         >
           <defs>
             <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#15803d" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#15803d" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
-          {/* Grid lines & Y-axis labels */}
+          {/* Grid lines & Y-axis labels with WCAG AA compliant #64748b fill */}
           <line
             x1={padLeft}
             y1={padTop}
@@ -167,12 +172,12 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
             strokeDasharray="3 3"
           />
           <text
-            x={padLeft - 6}
+            x={padLeft - 8}
             y={padTop + 3}
             textAnchor="end"
             fontSize="9"
-            fill="#94a3b8"
-            className="font-mono"
+            fill="#64748b"
+            className="font-mono font-medium"
           >
             ₹{Math.round(maxVal)}
           </text>
@@ -186,12 +191,12 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
             strokeDasharray="3 3"
           />
           <text
-            x={padLeft - 6}
+            x={padLeft - 8}
             y={padTop + chartH / 2 + 3}
             textAnchor="end"
             fontSize="9"
-            fill="#94a3b8"
-            className="font-mono"
+            fill="#64748b"
+            className="font-mono font-medium"
           >
             ₹{Math.round((minVal + maxVal) / 2)}
           </text>
@@ -204,22 +209,22 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
             stroke="#e2e8f0"
           />
           <text
-            x={padLeft - 6}
+            x={padLeft - 8}
             y={padTop + chartH + 3}
             textAnchor="end"
             fontSize="9"
-            fill="#94a3b8"
-            className="font-mono"
+            fill="#64748b"
+            className="font-mono font-medium"
           >
             ₹{Math.round(minVal)}
           </text>
 
-          {/* Fill and Line */}
+          {/* Fill and Main Line */}
           <path d={fillD} fill="url(#chartGradient)" />
           <path
             d={pathD}
             fill="none"
-            stroke="#047857"
+            stroke="#15803d"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -233,16 +238,16 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
                 y1={padTop}
                 x2={activePoint.x}
                 y2={padTop + chartH}
-                stroke="#cbd5e1"
+                stroke="#64748b"
                 strokeDasharray="2 2"
               />
               <circle
                 cx={activePoint.x}
                 cy={activePoint.y}
                 r="4.5"
-                fill="#047857"
+                fill="#15803d"
                 stroke="#ffffff"
-                strokeWidth="2"
+                strokeWidth="2.5"
               />
             </g>
           )}
@@ -262,8 +267,8 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
             />
           ))}
 
-          {/* X Axis dates (first and last) */}
-          <text x={padLeft} y={height - 6} textAnchor="start" fontSize="9" fill="#94a3b8">
+          {/* X Axis dates */}
+          <text x={padLeft} y={height - 6} textAnchor="start" fontSize="9" fill="#64748b">
             {sortedPoints[0]?.date}
           </text>
           <text
@@ -271,26 +276,38 @@ export default function PriceTrendChart({ prices, days = 30, onDaysChange }) {
             y={height - 6}
             textAnchor="end"
             fontSize="9"
-            fill="#94a3b8"
+            fill="#64748b"
           >
             {sortedPoints[sortedPoints.length - 1]?.date}
           </text>
         </svg>
       </div>
 
-      {/* Bottom Range Summary */}
+      {/* Bottom Summary Chips */}
       <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-100 text-center">
-        <div className="bg-slate-50 p-1.5 rounded-xl">
-          <span className="text-[10px] text-gray-400 block">Min Price</span>
-          <span className="text-xs font-bold text-gray-700">₹{stats.min}</span>
+        <div className="bg-emerald-50/70 border border-emerald-100 p-2.5 rounded-2xl">
+          <span className="text-[10px] text-emerald-800 block font-bold uppercase tracking-wider">
+            Low Rate
+          </span>
+          <span className="text-xs font-black text-gray-900 mt-0.5 block">
+            ₹{stats.min}
+          </span>
         </div>
-        <div className="bg-slate-50 p-1.5 rounded-xl">
-          <span className="text-[10px] text-gray-400 block">Max Price</span>
-          <span className="text-xs font-bold text-gray-700">₹{stats.max}</span>
+        <div className="bg-emerald-50/70 border border-emerald-100 p-2.5 rounded-2xl">
+          <span className="text-[10px] text-emerald-800 block font-bold uppercase tracking-wider">
+            Peak Rate
+          </span>
+          <span className="text-xs font-black text-gray-900 mt-0.5 block">
+            ₹{stats.max}
+          </span>
         </div>
-        <div className="bg-slate-50 p-1.5 rounded-xl">
-          <span className="text-[10px] text-gray-400 block">Date</span>
-          <span className="text-xs font-bold text-agri-800">{activePoint.date}</span>
+        <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-2xl">
+          <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-wider">
+            Active Date
+          </span>
+          <span className="text-xs font-black text-agri-800 mt-0.5 block truncate">
+            {activePoint.date}
+          </span>
         </div>
       </div>
     </div>

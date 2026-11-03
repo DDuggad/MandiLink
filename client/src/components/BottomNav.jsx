@@ -13,8 +13,8 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-lg">
-      <div className="max-w-md mx-auto grid grid-cols-4 h-16">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] pb-safe">
+      <div className="max-w-md mx-auto grid grid-cols-4 h-16 px-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -22,20 +22,25 @@ export default function BottomNav({ activeTab, setActiveTab }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center space-y-1 transition-colors ${
+              className={`flex flex-col items-center justify-center py-1 transition-all active:scale-95 select-none ${
                 isActive
-                  ? 'text-agri-700 font-semibold'
-                  : 'text-gray-500 hover:text-gray-800'
+                  ? 'text-agri-700 font-bold'
+                  : 'text-slate-500 hover:text-slate-800 font-medium'
               }`}
+              aria-label={tab.label}
             >
               <div
-                className={`p-1 rounded-xl transition-all ${
-                  isActive ? 'bg-agri-100' : ''
+                className={`p-1.5 rounded-2xl transition-all duration-200 ${
+                  isActive
+                    ? 'bg-agri-100/90 text-agri-700 shadow-sm scale-105'
+                    : 'text-slate-400 group-hover:text-slate-600'
                 }`}
               >
                 <Icon className="w-5 h-5" />
               </div>
-              <span className="text-xs leading-none">{tab.label}</span>
+              <span className="text-[11px] leading-tight mt-0.5 tracking-tight px-0.5 truncate max-w-full">
+                {tab.label}
+              </span>
             </button>
           );
         })}

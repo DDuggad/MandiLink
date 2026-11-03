@@ -29,11 +29,28 @@ export async function performDeltaSync() {
 }
 
 // Nearby mandis with offline cache fallback
-export async function fetchNearbyMandis(lat, lng, radiusKm = 50, limit = 5) {
+export async function fetchNearbyMandis(
+  latOrOpts,
+  lngArg,
+  radiusKmArg = 50,
+  limitArg = 5
+) {
+  let lat = latOrOpts;
+  let lng = lngArg;
+  let radiusKm = radiusKmArg;
+  let limit = limitArg;
+
+  if (typeof latOrOpts === 'object' && latOrOpts !== null) {
+    lat = latOrOpts.lat;
+    lng = latOrOpts.lng;
+    radiusKm = latOrOpts.radiusKm ?? 50;
+    limit = latOrOpts.limit ?? 5;
+  }
+
   try {
     const query = new URLSearchParams();
-    if (lat) query.append('lat', lat);
-    if (lng) query.append('lng', lng);
+    if (lat != null) query.append('lat', lat);
+    if (lng != null) query.append('lng', lng);
     query.append('radiusKm', radiusKm);
     query.append('limit', limit);
 
@@ -97,11 +114,21 @@ export async function fetchPriceForecast(commodityId, mandiId, horizonDays = 7) 
 }
 
 // Nearby transporters
-export async function fetchTransporters(lat, lng, radiusKm = 80) {
+export async function fetchTransporters(latOrOpts, lngArg, radiusKmArg = 80) {
+  let lat = latOrOpts;
+  let lng = lngArg;
+  let radiusKm = radiusKmArg;
+
+  if (typeof latOrOpts === 'object' && latOrOpts !== null) {
+    lat = latOrOpts.lat;
+    lng = latOrOpts.lng;
+    radiusKm = latOrOpts.radiusKm ?? 80;
+  }
+
   try {
     const query = new URLSearchParams();
-    if (lat) query.append('lat', lat);
-    if (lng) query.append('lng', lng);
+    if (lat != null) query.append('lat', lat);
+    if (lng != null) query.append('lng', lng);
     query.append('radiusKm', radiusKm);
 
     const res = await fetch(`${API_BASE}/transporters/nearby?${query}`, {
@@ -120,6 +147,8 @@ export async function fetchTransporters(lat, lng, radiusKm = 80) {
   const cached = await getCachedItems('transporters');
   return { data: cached, isOnline: false };
 }
+
+export const fetchNearbyTransporters = fetchTransporters;
 
 // Price history (7/30/90 days) for trends
 export async function fetchPriceHistory(commodityCode, mandiCode, days = 30) {
@@ -158,4 +187,31 @@ export async function fetchPriceHistory(commodityCode, mandiCode, days = 30) {
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   return { data: filtered, isOnline: false };
+}
+
+// Live AGMARKNET Status
+export async function fetchLiveStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/prices/live-status`, {
+      signal: AbortSignal.timeout(3500),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// Trigger Live AGMARKNET Ingestion
+export async function syncLiveAgmarknet() {
+  try {
+    const res = await fetch(`${API_BASE}/prices/sync-live`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }

@@ -5,19 +5,42 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
   }
 
   body {
     background-color: #f8fafc;
     color: #0f172a;
     font-family:
+      'Inter',
+      'Noto Sans Kannada',
+      'Noto Sans Devanagari',
       system-ui,
       -apple-system,
       BlinkMacSystemFont,
       'Segoe UI',
       Roboto,
-      'Noto Sans Kannada',
-      'Noto Sans Devanagari',
       sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  /* Safe-area insets for mobile gesture bars and notches */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Hide scrollbar for horizontal chip carousels */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }

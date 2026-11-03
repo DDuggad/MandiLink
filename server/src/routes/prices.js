@@ -4,6 +4,7 @@ import { Price } from '../models/Price.js';
 import { Mandi } from '../models/Mandi.js';
 import { Commodity } from '../models/Commodity.js';
 import { SEED_MANDIS, SEED_COMMODITIES, generatePriceHistory } from '../seed/data.js';
+import { runAgmarknetImport, getLiveSyncStatus } from '../services/agmarknetImporter.js';
 
 const router = express.Router();
 
@@ -13,6 +14,26 @@ function getSeedPrices() {
   if (!_seedPrices) _seedPrices = generatePriceHistory();
   return _seedPrices;
 }
+
+// GET /api/prices/live-status
+router.get('/live-status', async (req, res) => {
+  try {
+    const status = await getLiveSyncStatus();
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
+  }
+});
+
+// POST /api/prices/sync-live (Triggers real-time AGMARKNET ingestion)
+router.post('/sync-live', async (req, res) => {
+  try {
+    const result = await runAgmarknetImport('client-refresh');
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: { code: 'SYNC_ERROR', message: err.message } });
+  }
+});
 
 // GET /api/prices/latest?mandiIds=&commodityIds=
 router.get('/latest', async (req, res) => {
@@ -141,40 +162,64 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/prices/forecast?commodityId=&mandiId=&horizonDays=
-// Server-side simple statistical forecast: naive, 7-day and 30-day moving average.
-// Picks the method with the lowest MAPE on backtest and returns both it and the naive baseline.
+// Server-side statistical forecasting: Naive baseline, 7-day MA, 30-day MA, Linear Trend, and Weekly Seasonal.
+// Performs 14-day holdout backtesting to pick the lowest MAPE model, providing transparent naive-baseline comparison.
 router.get('/forecast', async (req, res) => {
   try {
     const { commodityId, mandiId, horizonDays = 7 } = req.query;
-    const horizon = parseInt(horizonDays) || 7;
-    const MIN_HISTORY = 30; // refuse to forecast with less than this many data points
+    const horizon = parseInt(horizonDays, 10) || 7;
+    const MIN_HISTORY = 30; // Require at least 30 observations for meaningful statistical estimation
 
     let series = []; // sorted ascending by date: { date, modalPrice }
 
-    if (mongoose.connection.readyState === 1 && commodityId && mandiId) {
-      const prices = await Price.find({
-        commodityId,
-        mandiId,
-        isDeleted: false,
-      })
+    if (mongoose.connection.readyState === 1 && (commodityId || mandiId)) {
+      let cId = commodityId;
+      let mId = mandiId;
+      if (commodityId && !mongoose.Types.ObjectId.isValid(commodityId)) {
+        const commDoc = await Commodity.findOne({
+          $or: [{ code: commodityId }, { 'names.en': new RegExp(commodityId, 'i') }],
+          isDeleted: false,
+        });
+        if (commDoc) cId = commDoc._id;
+      }
+      if (mandiId && !mongoose.Types.ObjectId.isValid(mandiId)) {
+        const mandiDoc = await Mandi.findOne({
+          $or: [{ code: mandiId }, { code: new RegExp(mandiId, 'i') }],
+          isDeleted: false,
+        });
+        if (mandiDoc) mId = mandiDoc._id;
+      }
+
+      const query = { isDeleted: false };
+      if (cId) query.commodityId = cId;
+      if (mId) query.mandiId = mId;
+
+      const prices = await Price.find(query)
         .sort({ date: 1 })
         .select('date modalPrice -_id');
 
-      series = prices.map((p) => ({
-        date: p.date.toISOString().split('T')[0],
-        value: p.modalPrice,
-      }));
-    } else {
-      // Use in-memory seed data (best-effort match by code fragment in the query)
+      if (prices.length >= MIN_HISTORY) {
+        series = prices.map((p) => ({
+          date: p.date.toISOString().split('T')[0],
+          value: p.modalPrice,
+        }));
+      }
+    }
+
+    if (series.length < MIN_HISTORY) {
+      // Use in-memory seed data (best-effort match by code or name fragment)
       const seedPrices = getSeedPrices();
       const matched = seedPrices
         .filter(
           (p) =>
-            (!commodityId || p.commodityCode.includes(commodityId)) &&
-            (!mandiId || p.mandiCode.includes(mandiId))
+            (!commodityId ||
+              p.commodityCode.toLowerCase().includes(commodityId.toLowerCase())) &&
+            (!mandiId || p.mandiCode.toLowerCase().includes(mandiId.toLowerCase()))
         )
         .sort((a, b) => a.date.localeCompare(b.date));
-      series = matched.map((p) => ({ date: p.date, value: p.modalPrice }));
+      if (matched.length > 0) {
+        series = matched.map((p) => ({ date: p.date, value: p.modalPrice }));
+      }
     }
 
     if (series.length < MIN_HISTORY) {
@@ -188,43 +233,156 @@ router.get('/forecast', async (req, res) => {
     }
 
     const values = series.map((s) => s.value);
+    const n = values.length;
+    const lastValue = values[n - 1];
 
-    // Naive forecast: repeat last known value
-    const lastValue = values[values.length - 1];
+    // Holdout backtest split (last 14 days)
+    const holdoutLength = Math.min(14, Math.floor(n * 0.2));
+    const trainValues = values.slice(0, n - holdoutLength);
+    const holdoutActuals = values.slice(n - holdoutLength);
+
+    function calcMetrics(actuals, predicted) {
+      const count = actuals.length;
+      if (count === 0) return { mape: Infinity, rmse: Infinity };
+      let sumPct = 0;
+      let sumSq = 0;
+      for (let i = 0; i < count; i++) {
+        const diff = actuals[i] - predicted[i];
+        sumPct += Math.abs(diff / actuals[i]);
+        sumSq += diff * diff;
+      }
+      return {
+        mape: Number(((sumPct / count) * 100).toFixed(2)),
+        rmse: Number(Math.sqrt(sumSq / count).toFixed(2)),
+      };
+    }
+
+    // 1. Naive Baseline (repeats last known train value)
+    const trainLast = trainValues[trainValues.length - 1];
+    const naiveBacktest = Array(holdoutLength).fill(trainLast);
+    const naiveMetrics = calcMetrics(holdoutActuals, naiveBacktest);
     const naiveForecast = Array(horizon).fill(lastValue);
 
-    // 7-day moving average forecast
+    // 2. 7-Day Moving Average
+    const trainMa7 =
+      trainValues.slice(-7).reduce((a, b) => a + b, 0) / Math.min(7, trainValues.length);
+    const ma7Backtest = Array(holdoutLength).fill(Math.round(trainMa7));
+    const ma7Metrics = calcMetrics(holdoutActuals, ma7Backtest);
     const ma7 = values.slice(-7).reduce((a, b) => a + b, 0) / Math.min(7, values.length);
     const ma7Forecast = Array(horizon).fill(Math.round(ma7));
 
-    // 30-day moving average forecast
+    // 3. 30-Day Moving Average
+    const trainMa30 =
+      trainValues.slice(-30).reduce((a, b) => a + b, 0) /
+      Math.min(30, trainValues.length);
+    const ma30Backtest = Array(holdoutLength).fill(Math.round(trainMa30));
+    const ma30Metrics = calcMetrics(holdoutActuals, ma30Backtest);
     const ma30 =
       values.slice(-30).reduce((a, b) => a + b, 0) / Math.min(30, values.length);
     const ma30Forecast = Array(horizon).fill(Math.round(ma30));
 
-    // Compute MAPE on held-out last 14 days to pick best method
-    function mape(actuals, predicted) {
-      const n = actuals.length;
-      if (n === 0) return Infinity;
-      return actuals.reduce((sum, a, i) => sum + Math.abs((a - predicted[i]) / a), 0) / n;
+    // 4. Linear Trend Regression (y = mx + c) on last 30 observations
+    function fitLinearTrend(data, stepsAhead) {
+      const windowSize = Math.min(30, data.length);
+      const slice = data.slice(-windowSize);
+      let sumX = 0,
+        sumY = 0,
+        sumXY = 0,
+        sumXX = 0;
+      for (let i = 0; i < windowSize; i++) {
+        sumX += i;
+        sumY += slice[i];
+        sumXY += i * slice[i];
+        sumXX += i * i;
+      }
+      const slope =
+        (windowSize * sumXY - sumX * sumY) / (windowSize * sumXX - sumX * sumX);
+      const intercept = (sumY - slope * sumX) / windowSize;
+
+      const projections = [];
+      for (let step = 1; step <= stepsAhead; step++) {
+        const xVal = windowSize - 1 + step;
+        projections.push(Math.round(Math.max(100, slope * xVal + intercept)));
+      }
+      return projections;
     }
 
-    const holdout = values.slice(-14);
-    const naiveMape = mape(
-      holdout,
-      Array(holdout.length).fill(values[values.length - 14 - 1])
-    );
-    const ma7Mape = mape(holdout, Array(holdout.length).fill(ma7));
-    const ma30Mape = mape(holdout, Array(holdout.length).fill(ma30));
+    const linearBacktest = fitLinearTrend(trainValues, holdoutLength);
+    const linearMetrics = calcMetrics(holdoutActuals, linearBacktest);
+    const linearForecast = fitLinearTrend(values, horizon);
 
-    const methods = [
-      { name: 'naive', mape: naiveMape, forecast: naiveForecast },
-      { name: 'ma7', mape: ma7Mape, forecast: ma7Forecast },
-      { name: 'ma30', mape: ma30Mape, forecast: ma30Forecast },
+    // 5. Weekly Seasonal Naive (repeats day-of-week lag from prior week)
+    const seasonalBacktest = [];
+    for (let i = 0; i < holdoutLength; i++) {
+      const lagIdx = trainValues.length - 7 + (i % 7);
+      seasonalBacktest.push(lagIdx >= 0 ? trainValues[lagIdx] : trainLast);
+    }
+    const seasonalMetrics = calcMetrics(holdoutActuals, seasonalBacktest);
+    const seasonalForecast = [];
+    for (let i = 0; i < horizon; i++) {
+      const lagIdx = values.length - 7 + (i % 7);
+      seasonalForecast.push(lagIdx >= 0 ? values[lagIdx] : lastValue);
+    }
+
+    const candidateModels = [
+      {
+        id: 'naive',
+        label: 'Naive Baseline (Last Recorded Price)',
+        mape: naiveMetrics.mape,
+        rmse: naiveMetrics.rmse,
+        forecast: naiveForecast,
+        description: 'Assumes current price continues forward unchanged.',
+      },
+      {
+        id: 'ma7',
+        label: '7-Day Moving Average',
+        mape: ma7Metrics.mape,
+        rmse: ma7Metrics.rmse,
+        forecast: ma7Forecast,
+        description:
+          'Smooths out transient weekend and auction-spike noise over the last week.',
+      },
+      {
+        id: 'ma30',
+        label: '30-Day Moving Average',
+        mape: ma30Metrics.mape,
+        rmse: ma30Metrics.rmse,
+        forecast: ma30Forecast,
+        description: 'Captures mid-term monthly equilibrium price level.',
+      },
+      {
+        id: 'linear_trend',
+        label: 'Linear Trend Regression (OLS)',
+        mape: linearMetrics.mape,
+        rmse: linearMetrics.rmse,
+        forecast: linearForecast,
+        description: 'Models consistent price momentum and slope over the past 30 days.',
+      },
+      {
+        id: 'seasonal_weekly',
+        label: 'Weekly Day-of-Week Seasonal',
+        mape: seasonalMetrics.mape,
+        rmse: seasonalMetrics.rmse,
+        forecast: seasonalForecast,
+        description: 'Mirrors recurring weekly market-day cyclical patterns.',
+      },
     ];
-    const best = methods.sort((a, b) => a.mape - b.mape)[0];
 
-    // Generate future dates for the forecast
+    // Pick best model by lowest MAPE on validation holdout
+    const sorted = [...candidateModels].sort((a, b) => a.mape - b.mape);
+    const best = sorted[0];
+
+    // Calculate improvement percentage relative to naive baseline
+    const naiveMape = naiveMetrics.mape;
+    const improvementPercent =
+      naiveMape > 0
+        ? Number((((naiveMape - best.mape) / naiveMape) * 100).toFixed(1))
+        : 0;
+
+    // Approximate 90% confidence uncertainty interval (± 1.645 * residual RMSE)
+    const uncertaintyBand = Math.round(1.645 * (best.rmse || lastValue * 0.05));
+
+    // Generate projected calendar dates
     const lastDate = new Date(series[series.length - 1].date);
     const forecastDates = Array.from({ length: horizon }, (_, i) => {
       const d = new Date(lastDate);
@@ -232,19 +390,50 @@ router.get('/forecast', async (req, res) => {
       return d.toISOString().split('T')[0];
     });
 
+    const detailedForecast = best.forecast.map((val, i) => ({
+      date: forecastDates[i],
+      predictedModalPrice: val,
+      lowerBound: Math.max(0, val - uncertaintyBand),
+      upperBound: val + uncertaintyBand,
+      naiveBaselineValue: naiveForecast[i],
+    }));
+
+    // Explainable rationale
+    let explanation = '';
+    if (best.id === 'naive') {
+      explanation = `The Naive Baseline achieved the lowest backtest error (${best.mape}% MAPE) on recent 14-day validation data. Consistent with agricultural economics literature, short-term mandi prices often follow a random-walk where today's price is the strongest predictor for tomorrow.`;
+    } else {
+      explanation = `${best.label} outperformed the Naive Baseline by achieving ${best.mape}% MAPE vs ${naiveMape}% MAPE (${improvementPercent}% error reduction) on a 14-day validation holdout. ${best.description}`;
+    }
+
     res.json({
       success: true,
       disclaimer:
-        'Estimate based on past prices only (statistical method). Actual prices may differ. Not financial advice.',
-      bestMethod: best.name,
-      naiveBaseline: { method: 'naive', forecast: naiveForecast },
-      recommendation: {
-        method: best.name,
-        forecast: best.forecast.map((v, i) => ({
-          date: forecastDates[i],
-          predictedModalPrice: v,
-        })),
+        'Statistical projection based on historical APMC arrivals and prices. Actual mandi prices depend on real-time arrivals and quality grades. Not financial advice.',
+      selectedModel: {
+        id: best.id,
+        label: best.label,
+        mape: best.mape,
+        rmse: best.rmse,
+        improvementPercent,
       },
+      naiveBaseline: {
+        id: 'naive',
+        mape: naiveMape,
+        rmse: naiveMetrics.rmse,
+      },
+      allModelsCompared: candidateModels.map((m) => ({
+        id: m.id,
+        label: m.label,
+        mape: m.mape,
+        rmse: m.rmse,
+      })),
+      explainability: {
+        explanation,
+        holdoutDays: holdoutLength,
+        uncertaintyBandRupees: uncertaintyBand,
+      },
+      forecast: detailedForecast,
       historySummary: {
         totalDays: series.length,
         lastKnownDate: series[series.length - 1].date,

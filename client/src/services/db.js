@@ -54,6 +54,23 @@ export async function getCachedItems(storeName) {
   return db.getAll(storeName);
 }
 
+// Convenience helpers
+export const getCachedMandis = () => getCachedItems('mandis');
+export const getCachedPrices = () => getCachedItems('prices');
+export const getCachedTransporters = () => getCachedItems('transporters');
+
+// User settings store helpers
+export async function getUserSettings() {
+  const db = await getDB();
+  const rec = await db.get('meta', 'user_settings');
+  return rec ? rec.value : null;
+}
+
+export async function saveUserSettings(settings) {
+  const db = await getDB();
+  await db.put('meta', { key: 'user_settings', value: settings });
+}
+
 // Save lastSyncedAt timestamp
 export async function setLastSynced(timestamp) {
   const db = await getDB();

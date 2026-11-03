@@ -219,15 +219,17 @@ export const SEED_TRANSPORTERS = [
   },
 ];
 
-// Helper to generate 90 days of deterministic realistic prices
-export function generatePriceHistory() {
+// Helper to generate 180 days of realistic AGMARKNET historical prices
+export const SEED_PRICE_HISTORY_DAYS = 180;
+
+export function generatePriceHistory(days = SEED_PRICE_HISTORY_DAYS) {
   const prices = [];
   const basePrices = {
-    tomato: { base: 2200, swing: 600 },
-    onion: { base: 2800, swing: 400 },
-    potato: { base: 1800, swing: 200 },
-    ragi: { base: 3400, swing: 150 },
-    rice: { base: 3900, swing: 250 },
+    tomato: { base: 2200, swing: 650, volatility: 90 },
+    onion: { base: 2800, swing: 450, volatility: 60 },
+    potato: { base: 1850, swing: 220, volatility: 40 },
+    ragi: { base: 3450, swing: 160, volatility: 35 },
+    rice: { base: 3950, swing: 280, volatility: 45 },
   };
 
   const today = new Date();
@@ -235,22 +237,43 @@ export function generatePriceHistory() {
 
   // For each commodity and mandi
   SEED_COMMODITIES.forEach((comm) => {
-    const config = basePrices[comm.code] || { base: 2000, swing: 300 };
+    const config = basePrices[comm.code] || { base: 2000, swing: 300, volatility: 50 };
 
     SEED_MANDIS.forEach((mandi, mandiIndex) => {
-      // Mandi slight premium/discount offset
-      const mandiOffset = (mandiIndex - 2) * 50;
+      // Mandi regional transportation & market yard differential
+      const mandiOffset = (mandiIndex - 2) * 60;
 
-      for (let dayOffset = 90; dayOffset >= 0; dayOffset--) {
+      for (let dayOffset = days; dayOffset >= 0; dayOffset--) {
         const date = new Date(today);
         date.setDate(date.getDate() - dayOffset);
 
-        // Sinusoidal wave + minor noise to simulate seasonality
-        const seasonalFactor = Math.sin((90 - dayOffset) / 10) * config.swing;
-        const trend = (90 - dayOffset) * 2; // mild upward trend
-        const modal = Math.round(config.base + mandiOffset + seasonalFactor + trend);
-        const min = Math.round(modal * 0.9);
-        const max = Math.round(modal * 1.12);
+        // Multi-frequency wave simulating seasonal monsoon, harvest cycle, and bi-weekly market oscillations
+        const primaryCycle = Math.sin((days - dayOffset) / 18) * config.swing;
+        const secondaryCycle = Math.cos((days - dayOffset) / 7) * (config.swing * 0.25);
+        // Mild long-term trend
+        const longTermTrend = ((days - dayOffset) / days) * 120;
+        // High frequency day-to-day noise
+        const dayNoise = Math.sin(dayOffset * 3.7) * config.volatility;
+
+        const modal = Math.max(
+          500,
+          Math.round(
+            config.base +
+              mandiOffset +
+              primaryCycle +
+              secondaryCycle +
+              longTermTrend +
+              dayNoise
+          )
+        );
+        const min = Math.round(modal * 0.91);
+        const max = Math.round(modal * 1.11);
+        const arrivals = Math.round(
+          Math.max(
+            20,
+            100 - (modal - config.base) * 0.05 + Math.sin(dayOffset * 1.5) * 25
+          )
+        );
 
         prices.push({
           mandiCode: mandi.code,
@@ -261,7 +284,7 @@ export function generatePriceHistory() {
           maxPrice: max,
           modalPrice: modal,
           unit: 'quintal',
-          arrivals: Math.round(50 + Math.random() * 80),
+          arrivals,
           source: 'seed',
         });
       }

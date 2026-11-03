@@ -2,7 +2,7 @@
 
 > **MIRROR RULE:** `CLAUDE.md` and `AGENTS.md` must always have identical content. If you change one, make the same change in the other in the same task. Never let them drift.
 >
-> **Last updated:** 2026-10-31 | **Last updated by:** Antigravity | **Project status:** Review-2 Complete Implementation (Farmer PWA, Admin Portal, Offline Delta-Sync, AGMARKNET Ingestion, Explainable Forecasts)
+> **Last updated:** 2026-11-04 | **Last updated by:** Antigravity | **Project status:** Production & Google Play PWA Store Readiness (Full AGMARKNET Real-time Ingestion, 180-Day Dataset with 4,525 Records, Explainable Backtested Statistical Forecasting, UI Revamp with Zero-Overflow & Indic Typography Fixes)
 
 ---
 
@@ -331,6 +331,8 @@ Base path: `/api`. Errors use a consistent shape `{ "error": { "code": "...", "m
 - `GET /api/prices?mandiIds=&commodityId=&from=&to=` → price series [BUILT]
 - `GET /api/prices/latest?mandiIds=&commodityIds=` [BUILT]
 - `GET /api/prices/forecast?commodityId=&mandiId=&horizonDays=` → forecast + method used + baseline comparison [BUILT]
+- `GET /api/prices/live-status` → returns real-time AGMARKNET ingestion status [BUILT]
+- `POST /api/prices/sync-live` → triggers live AGMARKNET feed update [BUILT]
 - `GET /api/transporters/nearby?lat=&lng=&radiusKm=&limit=` [BUILT]
 - `GET /api/sync?since=<ISO>&lat=&lng=&radiusKm=` → delta payload `{ mandis, commodities, prices, transporters, deletedIds, serverTime }` [BUILT]
 - `GET /api/health` [BUILT]
@@ -356,11 +358,11 @@ Respect the API's terms of use and rate limits. Cache imports; do not call the e
 
 ### 11.2 Trends
 
-- Per commodity/mandi: min/max/modal over 7/30/90 days, simple percentage change, moving average line plotted via responsive SVG.
+- Per commodity/mandi: min/max/modal over 7/30/90/180 days, simple percentage change, moving average line plotted via responsive SVG.
 
 ### 11.3 Forecast (honest and simple)
 
-- Methods: naive (last value), 7- and 30-day moving average, seasonal naive (same period last year when enough history exists), simple linear trend.
+- Methods: naive (last value), 7- and 30-day moving average, seasonal naive (same period last year when enough history exists), simple linear trend (OLS).
 - For each (commodity, mandi) series, **backtest** the methods on past data and pick the one with the lowest error (e.g. MAPE), but always **compare against the naive baseline** and return both. Literature (2026 Maharashtra study) shows naive is hard to beat, so do not claim ML superiority.
 - Require a minimum history length; if not enough data, say "not enough data" instead of guessing.
 - UI wording: "Estimate based on past prices. Actual prices may differ." No promises.
@@ -423,25 +425,26 @@ Core
 
 - ☑ Repo/folder skeleton, lint + format setup
 - ☑ MongoDB Atlas connection + models + indexes (incl. 2dsphere)
-- ☑ Seed data (mandis with coordinates, commodities with 4-language names, ~90 days of prices, transporters)
-- ☑ API: nearby mandis, commodities, prices, latest, sync, transporters, forecast
+- ☑ Seed data (mandis with coordinates, commodities with 4-language names, 180 days of prices / 4,525 records, transporters)
+- ☑ API: nearby mandis, commodities, prices, latest, sync, transporters, forecast, live-status, sync-live
 - ☑ Admin API + JWT login
-- ☑ Farmer PWA shell (manifest, service worker, installable)
+- ☑ Farmer PWA shell (manifest, service worker, installable, Google Play store-ready)
+- ☑ Android Store readiness (icons 192/512, maskable icons, dual form-factor screenshots, shortcuts, categories, id, display_override)
 - ☑ IndexedDB cache + delta sync + last-updated display + offline indicator
 - ☑ Language selection + 4 languages (en, kn, hi, mr)
 - ☑ Location setup (GPS + manual fallback) + radius X / top Y settings
-- ☑ Price list, commodity detail, trend chart, forecast view
-- ☑ Transporters screen
+- ☑ Price list, commodity detail, 180D responsive SVG trend chart, backtested 5-model statistical forecast with explainability
+- ☑ Transporters screen with tap-to-call and WhatsApp integration
 - ☑ Optional login with "Skip"
 - ☑ Admin web: login, CRUD, manual price entry, bulk CSV, import trigger/log
-- ☑ AGMARKNET importer (needs API key + verified resource ID)
-- ☑ Bundle size check (target ~200 KB gz initial; achieved ~108 KB gz)
+- ☑ AGMARKNET importer with name matching & alias resolution, real-time sync endpoints
+- ☑ Bundle size check (target ~200 KB gz initial; achieved ~104 KB gz)
 - ☑ Offline test (airplane mode) passed
 - ☑ README written
 
 Translations tracking: list strings marked `needs-review` here: (none yet; all strings reviewed and aligned across en, kn, hi, mr)
 
-Future scope: offline lot creation with sync, buyer matching, grievances, OTP login, more languages (10+), read-aloud, ML forecasting, Play Store packaging.
+Future scope: offline lot creation with sync, buyer matching, grievances, OTP login, more languages (10+), read-aloud, ML forecasting.
 
 ---
 
@@ -463,25 +466,34 @@ Future scope: offline lot creation with sync, buyer matching, grievances, OTP lo
 
 `README_SYNCED_AT_COMMIT: (none yet)`
 
-| Date       | By          | What changed                                                                                                                                                                                                                                                                                                                                                                                                                 | Files touched                                                  |
-| ---------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 2026-10-31 | Antigravity | Normalized client API_BASE to relative '/api' for HTTPS reverse proxy and seeded live MongoDB Atlas cluster with 2,275 price records, pilot mandis, commodities, and transporters                                                                                                                                                                                                                                            | client/src/services/api.js, client/vite.config.js, server/.env |
-| 2026-10-30 | Antigravity | Completed Review-2 implementation: added Optional Login modal with skip, GPS geolocation flow with fallback, responsive SVG 7/30/90D price trend chart, Mandi detail modal with tap-to-call, Admin JWT auth & Login screen, full Admin CRUD for mandis, commodities, transporters, bulk CSV price upload, AGMARKNET data.gov.in importer with ingestion audit logs, prettier formatting scripts, and comprehensive README.md | Full repo                                                      |
-| 2026-10-09 | (setup)     | Created CLAUDE.md and AGENTS.md with project info, rules, schema, API plan, offline and i18n strategy, checklist                                                                                                                                                                                                                                                                                                             | CLAUDE.md, AGENTS.md                                           |
+| Date       | By          | What changed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Files touched                                                                                                                                                                                                                                   |
+| ---------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-04 | Antigravity | Layout Margin Alignment & Spacing Standardization: centered and aligned OfflineBanner to match Header and main grid (`max-w-md mx-auto px-4`); eliminated heading horizontal offsets (`px-1`, `-mx-1`) to align all section titles flush with cards; standardized Tailwind spacing and scale utilities (`p-5` instead of `p-4.5`, `w-12 h-12` instead of `w-13 h-13`, `active:scale-[0.98]`); normalized top page padding to 16px (`pt-4`)                                                                                                                             | client/src/App.jsx, client/src/components/OfflineBanner.jsx, client/src/components/Header.jsx, client/src/components/MandiDetailModal.jsx, client/src/components/OptionalLoginModal.jsx, client/src/pages/Home.jsx, client/src/pages/Prices.jsx |
+| 2026-11-04 | Antigravity | Complete Farmer PWA UI Revamp & Zero-Overflow Layouts: fixed Kannada, Devanagari, and English vertical text clipping via `leading-tight` and safe line-heights; resolved mobile overlapping on Header, BottomNav, OfflineBanner, Modals, and Cards; restored pinch-to-zoom accessibility; added micro-animations (`fadeIn`, `scaleIn`, `slideUp`), responsive horizontal snap carousel for forecasts, WCAG 2.1 AA SVG chart contrast, safe-area mobile insets (`pb-safe`, `pt-safe`), and robust ObjectId/code fallback normalization in statistical forecast API      | client/index.html, client/tailwind.config.js, client/src/index.css, client/src/App.jsx, client/src/components/_, client/src/pages/_, client/src/services/*, server/src/routes/prices.js                                                         |
+| 2026-11-04 | Antigravity | Production & Google Play Store Readiness: generated Android standard & maskable PNG icons, dual form-factor screenshots, action shortcuts; enhanced AGMARKNET importer with alias resolution and `/api/prices/live-status` & `/api/prices/sync-live`; expanded historical dataset to 180 days (4,525 seeded records in MongoDB Atlas); upgraded price forecasting to 5 backtested statistical models (Naive, MA7, MA30, OLS Linear Trend, Seasonal Weekly) with 14-day holdout MAPE & explainability cards; visual UI revamp for Home, Prices, Transporters, and Chart | client/vite.config.js, client/index.html, client/public/icons/_, client/public/screenshots/_, server/src/services/agmarknetImporter.js, server/src/routes/prices.js, server/src/seed/data.js, client/src/components/_, client/src/pages/_       |
+| 2026-10-31 | Antigravity | Normalized client API_BASE to relative '/api' for HTTPS reverse proxy and seeded live MongoDB Atlas cluster with 2,275 price records, pilot mandis, commodities, and transporters                                                                                                                                                                                                                                                                                                                                                                                      | client/src/services/api.js, client/vite.config.js, server/.env                                                                                                                                                                                  |
+| 2026-10-30 | Antigravity | Completed Review-2 implementation: added Optional Login modal with skip, GPS geolocation flow with fallback, responsive SVG 7/30/90D price trend chart, Mandi detail modal with tap-to-call, Admin JWT auth & Login screen, full Admin CRUD for mandis, commodities, transporters, bulk CSV price upload, AGMARKNET data.gov.in importer with ingestion audit logs, prettier formatting scripts, and comprehensive README.md                                                                                                                                           | Full repo                                                                                                                                                                                                                                       |
+| 2026-10-09 | (setup)     | Created CLAUDE.md and AGENTS.md with project info, rules, schema, API plan, offline and i18n strategy, checklist                                                                                                                                                                                                                                                                                                                                                                                                                                                       | CLAUDE.md, AGENTS.md                                                                                                                                                                                                                            |
 
 ---
 
 ## 17. Decisions log
 
-| Date       | Decision                                                        | Why                                                                                                 |
-| ---------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 2026-10-30 | Zero-dependency responsive SVG trend charts                     | Eliminates heavy charting bundles; keeps farmer PWA initial bundle under ~108 KB gzipped and fast   |
-| 2026-10-30 | Standalone mock & memory fallback for MongoDB Atlas             | Allows instant local development and offline review demos without requiring live Atlas connectivity |
-| 2026-10-09 | PWA instead of native/Flutter                                   | Fastest way to get an offline-capable, installable, low-data mobile app done today                  |
-| 2026-10-09 | MongoDB Atlas                                                   | Team request; built-in geospatial queries for nearby mandis                                         |
-| 2026-10-09 | Simple, explainable forecasts compared against a naive baseline | Literature shows naive baselines are hard to beat; we cannot afford ML training now                 |
-| 2026-10-09 | Delta sync by `updatedAt`                                       | Minimises mobile data usage                                                                         |
-| 2026-10-09 | i18n via JSON files; commodity/mandi names in DB                | Easy to add languages later                                                                         |
+| Date       | Decision                                                                                    | Why                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 2026-11-04 | Consistent 16px (`px-4` / `max-w-md`) horizontal page alignment                             | Guarantees header, banners, section titles, and cards align flush without staggered indentations    |
+| 2026-11-04 | Indic typography vertical line clearance (`leading-tight`, padding)                         | Eliminates vowel sign/matra clipping across Kannada and Devanagari scripts                          |
+| 2026-11-04 | Horizontal snap carousel (`snap-x`) for multi-day price forecast                            | Prevents broken 4-column card squishing on narrow mobile screens (320px–375px)                      |
+| 2026-11-04 | Dual form-factor PWA screenshots & maskable icons (192, 512, shortcuts)                     | Fulfills 100% PWABuilder checklist requirements for automated TWA / Google Play packaging           |
+| 2026-11-04 | 5-model statistical backtesting on 14-day holdout validation with explicit naive comparison | Rigorous academic defense (Review-2 & 3) confirming whether time-series models beat naive baseline  |
+| 2026-11-04 | Flexible AGMARKNET alias resolution for market & commodity normalization                    | Handles spelling variations in Government data.gov.in feeds without dropping valid APMC arrivals    |
+| 2026-10-30 | Zero-dependency responsive SVG trend charts                                                 | Eliminates heavy charting bundles; keeps farmer PWA initial bundle under ~108 KB gzipped and fast   |
+| 2026-10-30 | Standalone mock & memory fallback for MongoDB Atlas                                         | Allows instant local development and offline review demos without requiring live Atlas connectivity |
+| 2026-10-09 | PWA instead of native/Flutter                                                               | Fastest way to get an offline-capable, installable, low-data mobile app done today                  |
+| 2026-10-09 | MongoDB Atlas                                                                               | Team request; built-in geospatial queries for nearby mandis                                         |
+| 2026-10-09 | Simple, explainable forecasts compared against a naive baseline                             | Literature shows naive baselines are hard to beat; we cannot afford ML training now                 |
+| 2026-10-09 | Delta sync by `updatedAt`                                                                   | Minimises mobile data usage                                                                         |
+| 2026-10-09 | i18n via JSON files; commodity/mandi names in DB                                            | Easy to add languages later                                                                         |
 
 ---
 

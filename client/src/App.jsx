@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
-import OfflineBanner from './components/OfflineBanner';
 import BottomNav from './components/BottomNav';
+import OfflineBanner from './components/OfflineBanner';
 import OptionalLoginModal from './components/OptionalLoginModal';
 import MandiDetailModal from './components/MandiDetailModal';
 import Home from './pages/Home';
@@ -11,77 +11,46 @@ import Settings from './pages/Settings';
 import {
   fetchNearbyMandis,
   fetchLatestPrices,
-  fetchTransporters,
+  fetchNearbyTransporters,
   performDeltaSync,
 } from './services/api';
-import { getLastSynced } from './services/db';
+import {
+  getCachedMandis,
+  getCachedPrices,
+  getCachedTransporters,
+  getUserSettings,
+  getLastSynced,
+} from './services/db';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // User preferences & location
-  const [radiusKm, setRadiusKm] = useState(50);
-  const [userLocation, setUserLocation] = useState('Bengaluru Urban');
-  const [coordinates, setCoordinates] = useState({ lat: 12.9716, lng: 77.5946 });
-
-  // App data state
+  // Core state
   const [mandis, setMandis] = useState([]);
   const [prices, setPrices] = useState([]);
   const [transporters, setTransporters] = useState([]);
 
-  // Modals
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  // Modals state
   const [selectedMandi, setSelectedMandi] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Check first launch for optional login
-  useEffect(() => {
-    const isDismissed = localStorage.getItem('mandilink_auth_dismissed');
-    if (!isDismissed) {
-      setShowLoginModal(true);
-    }
-  }, []);
+  // User Settings state
+  const [radiusKm, setRadiusKm] = useState(50);
+  const [userLocation, setUserLocation] = useState('Bengaluru / Kolar');
+  const [coordinates, setCoordinates] = useState({ lat: 12.9716, lng: 77.5946 });
 
-  // Request GPS position on mount
+  // Monitor network status
   useEffect(() => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCoordinates({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
-        },
-        (err) => {
-          console.log('GPS location note:', err.message, '- using selected district');
-        },
-        { timeout: 5000, maximumAge: 600000 }
-      );
-    }
-  }, []);
-
-  // Sync coords if manual location changes
-  useEffect(() => {
-    const districtCoords = {
-      'Bengaluru Urban': { lat: 12.9716, lng: 77.5946 },
-      Kolar: { lat: 13.1367, lng: 78.1348 },
-      Pune: { lat: 18.5204, lng: 73.8567 },
-      Nashik: { lat: 19.9975, lng: 73.7898 },
-    };
-    if (districtCoords[userLocation]) {
-      setCoordinates(districtCoords[userLocation]);
-    }
-  }, [userLocation]);
-
-  // Network online/offline event listeners
-  useEffect(() => {
-    const handleOnline = () => {
+    function handleOnline() {
       setIsOnline(true);
       triggerSync();
-    };
-    const handleOffline = () => setIsOnline(false);
+    }
+    function handleOffline() {
+      setIsOnline(false);
+    }
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -92,30 +61,76 @@ export default function App() {
     };
   }, []);
 
-  const loadData = useCallback(async () => {
-    const [mandisRes, pricesRes, transportersRes] = await Promise.all([
-      fetchNearbyMandis(coordinates.lat, coordinates.lng, radiusKm),
-      fetchLatestPrices(),
-      fetchTransporters(coordinates.lat, coordinates.lng),
-    ]);
-
-    setMandis(mandisRes.data || []);
-    setPrices(pricesRes.data || []);
-    setTransporters(transportersRes.data || []);
-  }, [coordinates.lat, coordinates.lng, radiusKm]);
-
   // Initial load
   useEffect(() => {
     async function init() {
+      // Check if user has dismissed or logged in
+      const authDismissed = localStorage.getItem('mandilink_auth_dismissed');
+      if (!authDismissed) {
+        setShowLoginModal(true);
+      }
+
+      // Load settings
+      const settings = await getUserSettings();
+      if (settings) {
+        if (settings.radiusKm) setRadiusKm(settings.radiusKm);
+        if (settings.locationName) setUserLocation(settings.locationName);
+        if (settings.location) {
+          setCoordinates({ lat: settings.location.lat, lng: settings.location.lng });
+        }
+      }
+
       const syncTime = await getLastSynced();
       setLastSynced(syncTime);
+
       await loadData();
+
+      // Delta sync if online
       if (navigator.onLine) {
         triggerSync();
       }
     }
+
     init();
-  }, [loadData]);
+  }, []);
+
+  async function loadData() {
+    // 1. Cached data first (Stale-While-Revalidate)
+    const [cachedM, cachedP, cachedT] = await Promise.all([
+      getCachedMandis(),
+      getCachedPrices(),
+      getCachedTransporters(),
+    ]);
+
+    if (cachedM.length > 0) setMandis(cachedM);
+    if (cachedP.length > 0) setPrices(cachedP);
+    if (cachedT.length > 0) setTransporters(cachedT);
+
+    // 2. Network refresh if online
+    if (navigator.onLine) {
+      try {
+        const [freshM, freshP, freshT] = await Promise.all([
+          fetchNearbyMandis({
+            lat: coordinates.lat,
+            lng: coordinates.lng,
+            radiusKm,
+          }),
+          fetchLatestPrices(),
+          fetchNearbyTransporters({
+            lat: coordinates.lat,
+            lng: coordinates.lng,
+            radiusKm,
+          }),
+        ]);
+
+        if (freshM?.data) setMandis(freshM.data);
+        if (freshP?.data) setPrices(freshP.data);
+        if (freshT?.data) setTransporters(freshT.data);
+      } catch (err) {
+        console.warn('Network refresh error:', err);
+      }
+    }
+  }
 
   async function triggerSync() {
     setIsSyncing(true);
@@ -129,7 +144,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-agri-100 selection:text-agri-900">
       <Header
         isOnline={isOnline}
         onSync={triggerSync}
@@ -139,13 +154,15 @@ export default function App() {
 
       <OfflineBanner isOnline={isOnline} lastSynced={lastSynced} />
 
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4">
+      {/* Main content container with safe area and bottom nav padding */}
+      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 pb-24 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
         {activeTab === 'home' && (
           <Home
             mandis={mandis}
             prices={prices}
             onSelectCommodity={() => setActiveTab('prices')}
             onSelectMandi={(mandi) => setSelectedMandi(mandi)}
+            onNavigateTab={(tab) => setActiveTab(tab)}
           />
         )}
         {activeTab === 'prices' && <Prices prices={prices} mandis={mandis} />}
